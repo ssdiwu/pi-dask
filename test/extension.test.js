@@ -20,8 +20,8 @@ const request = {
       description: "Choose many",
       type: "multiple",
       labels: [
-        { id: 3, label: "Docs", value: "docs", description: "Document it" },
-        { id: 4, label: "Tests", value: "tests", description: "Test it" },
+        { id: 1, label: "Docs", value: "docs", description: "Document it" },
+        { id: 2, label: "Tests", value: "tests", description: "Test it" },
       ],
     },
   ],
@@ -60,6 +60,27 @@ test("dask adapter maps TUI events to a confirmed result", async () => {
       { id: "scope", value: [{ source: "label", value: "docs" }] },
     ],
   });
+});
+
+test("dask adapter renders IDs as the user-visible option numbers", async () => {
+  const tool = createTool();
+  assert.match(tool.description, /consecutive IDs in display order \(1, 2, \.\.\., N\)/);
+  let rendered = "";
+  await assert.rejects(
+    () => tool.execute("call", request, undefined, undefined, {
+      mode: "tui",
+      ui: {
+        custom: async (factory) => new Promise((resolve) => {
+          const component = factory({ requestRender() {} }, theme, {}, resolve);
+          rendered = component.render(120).join("\n");
+          component.handleInput("\x1b");
+        }),
+      },
+    }),
+    /cancelled dask/,
+  );
+  assert.match(rendered, /> 1\. Fast/);
+  assert.match(rendered, /  2\. Complete/);
 });
 
 test("dask adapter rejects non-TUI execution", async () => {

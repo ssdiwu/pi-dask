@@ -8,7 +8,10 @@ import { createWizard, currentDraft, reduceWizard, type WizardState } from "./wi
 
 const ScalarSchema = Type.Union([Type.String(), Type.Number(), Type.Boolean()]);
 const LabelSchema = Type.Object({
-  id: Type.Integer({ minimum: 0 }),
+  id: Type.Integer({
+    minimum: 1,
+    description: "User-visible option number. Within each question, IDs must be consecutive in display order: 1, 2, ..., N.",
+  }),
   label: Type.String(),
   value: ScalarSchema,
   description: Type.String(),
@@ -146,7 +149,7 @@ function createWizardComponent(
           const selected = question.type === "multiple" && state.drafts[state.questionIndex]!.selectedIds.includes(label.id);
           const prefix = state.cursor === index ? theme.fg("accent", "> ") : "  ";
           const mark = question.type === "multiple" ? (selected ? "[x] " : "[ ] ") : "";
-          add(`${prefix}${mark}${label.label}`);
+          add(`${prefix}${mark}${label.id}. ${label.label}`);
           add(`     ${theme.fg("muted", label.description)}`);
         });
         const otherIndex = question.labels.length;
@@ -183,7 +186,7 @@ export default function dask(pi: ExtensionAPI) {
   pi.registerTool({
     name: "dask",
     label: "Dask",
-    description: "Collect flat, enumerated single-choice or multiple-choice answers from the user.",
+    description: "Collect flat, enumerated single-choice or multiple-choice answers from the user. Within each question, labels must use consecutive IDs in display order (1, 2, ..., N); the TUI shows these IDs before each option so custom answers can refer to an option by number.",
     parameters: DaskParamsSchema,
     executionMode: "sequential",
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

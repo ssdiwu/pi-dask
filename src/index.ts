@@ -3,6 +3,7 @@ export type Scalar = string | number | boolean;
 export type QuestionType = "single" | "multiple";
 
 export interface Label {
+  /** User-visible option number; must be consecutive in display order: 1, 2, ..., N. */
   id: number;
   label: string;
   value: Scalar;

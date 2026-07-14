@@ -31,7 +31,9 @@ test("rejects duplicate values and non-scalar values", () => {
   assert.throws(() => validateRequest({ questions: [question("single", [label(1, {}), label(2, "b")])] }), DaskValidationError);
 });
 
-test("rejects duplicate question and option ids", () => {
+test("rejects duplicate question ids and option IDs that are not display-order sequences", () => {
   assert.throws(() => validateRequest({ questions: [question(), { ...question(), id: "q1" }] }), DaskValidationError);
-  assert.throws(() => validateRequest({ questions: [question("single", [label(1, "a"), label(1, "b")])] }), DaskValidationError);
+  assert.throws(() => validateRequest({ questions: [question("single", [label(0, "a"), label(1, "b")])] }), DaskValidationError);
+  assert.throws(() => validateRequest({ questions: [question("single", [label(1, "a"), label(3, "b")])] }), DaskValidationError);
+  assert.throws(() => validateRequest({ questions: [question("single", [label(2, "a"), label(1, "b")])] }), DaskValidationError);
 });

@@ -20,8 +20,8 @@ const request = {
       description: "Choose many",
       type: "multiple",
       labels: [
-        { id: 3, label: "Docs", value: "docs", description: "Document it" },
-        { id: 4, label: "Tests", value: "tests", description: "Test it" },
+        { id: 1, label: "Docs", value: "docs", description: "Document it" },
+        { id: 2, label: "Tests", value: "tests", description: "Test it" },
       ],
     },
   ],
@@ -64,12 +64,12 @@ test("back preserves edits and summary returns to the last question", () => {
   state = reduce(state, { type: "select" }, { type: "toggle" }, { type: "next" }, { type: "back" });
   assert.equal(state.phase, "question");
   assert.equal(state.questionIndex, 1);
-  assert.deepEqual(currentDraft(state), { selectedIds: [3] });
+  assert.deepEqual(currentDraft(state), { selectedIds: [1] });
 
   state = reduce(state, { type: "back" }, { type: "move", delta: 1 }, { type: "select" });
   assert.equal(state.questionIndex, 1);
   assert.deepEqual(state.drafts[0], { selectedIds: [2] });
-  assert.deepEqual(currentDraft(state), { selectedIds: [3] });
+  assert.deepEqual(currentDraft(state), { selectedIds: [1] });
 });
 
 test("next does not advance an unanswered multiple question", () => {

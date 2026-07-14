@@ -32,8 +32,8 @@ function requireString(value: unknown, path: string): string {
 function parseLabel(value: unknown, path: string): Label {
   if (!isRecord(value)) throw new DaskValidationError(path, "must be an object");
   const id = value.id;
-  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 0) {
-    throw new DaskValidationError(`${path}.id`, "must be a non-negative safe integer");
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 1) {
+    throw new DaskValidationError(`${path}.id`, "must be a positive safe integer");
   }
   if (!isScalar(value.value)) {
     throw new DaskValidationError(`${path}.value`, "must be a string, finite number, or boolean");
@@ -71,14 +71,13 @@ function parseQuestion(value: unknown, index: number): Question {
   }
 
   const labels = value.labels.map((label, labelIndex) => parseLabel(label, `${path}.labels[${labelIndex}]`));
-  const ids = new Set<number>();
   const values: Scalar[] = [];
   for (let labelIndex = 0; labelIndex < labels.length; labelIndex++) {
     const label = labels[labelIndex]!;
-    if (ids.has(label.id)) {
-      throw new DaskValidationError(`${path}.labels[${labelIndex}].id`, "must be unique within the question");
+    const expectedId = labelIndex + 1;
+    if (label.id !== expectedId) {
+      throw new DaskValidationError(`${path}.labels[${labelIndex}].id`, `must be ${expectedId} to match its display order`);
     }
-    ids.add(label.id);
     if (values.some((existing) => existing === label.value)) {
       throw new DaskValidationError(
         `${path}.labels[${labelIndex}].value`,
