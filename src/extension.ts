@@ -1,10 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Editor, Key, matchesKey, Text, wrapTextWithAnsi, type EditorTheme } from "@earendil-works/pi-tui";
+import { Editor, Key, matchesKey, Text, visibleWidth, wrapTextWithAnsi, type EditorTheme } from "@earendil-works/pi-tui";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import type { DaskRequest, DaskResult, Question } from "./index.js";
 import { validateRequest } from "./validation.js";
-import { createWizard, currentDraft, reduceWizard, type WizardState } from "./wizard.js";
+import { createWizard, currentDraft, isQuestionAnswered, reduceWizard, type WizardState } from "./wizard.js";
 
 const ScalarSchema = Type.Union([Type.String(), Type.Number(), Type.Boolean()]);
 const LabelSchema = Type.Object({
@@ -25,6 +25,8 @@ const QuestionSchema = Type.Object({
 });
 const DaskParamsSchema = Type.Object({ questions: Type.Array(QuestionSchema) });
 type DaskParams = Static<typeof DaskParamsSchema>;
+
+const QUESTION_SHORTCUT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 
 function answerText(result: DaskResult): string {
   return result.answers
@@ -49,6 +51,8 @@ function createWizardComponent(
     let state = createWizard(request);
     let inputMode = false;
     let cachedLines: string[] | undefined;
+    let cachedWidth: number | undefined;
+    const isMultiQuestion = request.questions.length > 1;
 
     const editorTheme: EditorTheme = {
       borderColor: (text) => theme.fg("accent", text),
@@ -64,6 +68,7 @@ function createWizardComponent(
 
     const refresh = () => {
       cachedLines = undefined;
+      cachedWidth = undefined;
       tui.requestRender();
     };
 
@@ -111,9 +116,27 @@ function createWizardComponent(
         else if (matchesKey(data, Key.left) || matchesKey(data, Key.backspace)) dispatch({ type: "back" });
         return;
       }
+      if (isMultiQuestion) {
+        const shortcutCount = Math.min(9, request.questions.length);
+        for (let index = 0; index < shortcutCount; index++) {
+          if (matchesKey(data, QUESTION_SHORTCUT_KEYS[index]!)) {
+            dispatch({ type: "jump", questionIndex: index });
+            return;
+          }
+        }
+        if (matchesKey(data, Key.left)) {
+          dispatch({ type: "jump", questionIndex: state.questionIndex - 1 });
+          return;
+        }
+        if (matchesKey(data, Key.right)) {
+          dispatch({ type: "jump", questionIndex: state.questionIndex + 1 });
+          return;
+        }
+      }
       if (matchesKey(data, Key.up)) dispatch({ type: "move", delta: -1 });
       else if (matchesKey(data, Key.down)) dispatch({ type: "move", delta: 1 });
-      else if (matchesKey(data, Key.left) || matchesKey(data, Key.backspace)) dispatch({ type: "back" });
+      else if (matchesKey(data, Key.backspace)) dispatch({ type: "back" });
+      else if (!isMultiQuestion && matchesKey(data, Key.left)) dispatch({ type: "back" });
       else if (state.questionIndex >= 0) {
         const question = request.questions[state.questionIndex]!;
         const isOther = state.cursor === question.labels.length;
@@ -127,11 +150,33 @@ function createWizardComponent(
     };
 
     const render = (width: number): string[] => {
-      if (cachedLines) return cachedLines;
+      const renderWidth = Math.max(1, width);
+      if (cachedLines && cachedWidth === renderWidth) return cachedLines;
       const lines: string[] = [];
       const question = state.phase === "question" ? request.questions[state.questionIndex]! : undefined;
-      const add = (text: string) => lines.push(...wrapTextWithAnsi(text, Math.max(1, width)));
-      add(theme.fg("accent", "─".repeat(Math.max(1, width))));
+      const add = (text: string) => lines.push(...wrapTextWithAnsi(text, renderWidth));
+      const addTabs = (tabs: string[]) => {
+        let line = "";
+        for (const tab of tabs) {
+          if (visibleWidth(tab) > renderWidth) {
+            if (line) {
+              lines.push(line);
+              line = "";
+            }
+            add(tab);
+            continue;
+          }
+          const candidate = line ? `${line} ${tab}` : tab;
+          if (line && visibleWidth(candidate) > renderWidth) {
+            lines.push(line);
+            line = tab;
+          } else {
+            line = candidate;
+          }
+        }
+        if (line) add(line);
+      };
+      add(theme.fg("accent", "─".repeat(renderWidth)));
       if (state.phase === "summary") {
         add(theme.fg("accent", theme.bold("答案摘要")));
         lines.push("");
@@ -140,8 +185,25 @@ function createWizardComponent(
           add(`${item.title}: ${displayAnswer(item, itemState)}`);
         });
         lines.push("");
-        add(theme.fg("dim", "Enter 确认提交 · ← 返回修改 · Esc 取消"));
+        const firstUnanswered = request.questions.findIndex((_item, index) => !isQuestionAnswered(state, index));
+        if (firstUnanswered >= 0) {
+          const unansweredCount = request.questions.filter((_item, index) => !isQuestionAnswered(state, index)).length;
+          add(theme.fg("warning", `还有 ${unansweredCount} 题未回答；Enter 返回第 ${firstUnanswered + 1} 题补答`));
+          add(theme.fg("dim", "← 返回修改 · Esc 取消"));
+        } else {
+          add(theme.fg("dim", "Enter 确认提交 · ← 返回修改 · Esc 取消"));
+        }
       } else if (question) {
+        if (isMultiQuestion) {
+          add(theme.fg("muted", `问题 ${state.questionIndex + 1} / ${request.questions.length}`));
+          addTabs(request.questions.map((_item, index) => {
+            const answered = isQuestionAnswered(state, index);
+            const tab = `[${answered ? "✓" : "○"} ${index + 1}]`;
+            if (index === state.questionIndex) return theme.bg("selectedBg", theme.fg("text", tab));
+            return theme.fg(answered ? "success" : "dim", tab);
+          }));
+          lines.push("");
+        }
         add(theme.fg("text", question.title));
         add(theme.fg("muted", question.description));
         lines.push("");
@@ -164,11 +226,19 @@ function createWizardComponent(
           add(theme.fg("dim", "Enter 提交 · Esc 返回选项"));
         } else {
           lines.push("");
-          add(theme.fg("dim", question.type === "multiple" ? "↑↓ 移动 · Space 选择 · Enter 下一题 · ← 返回 · Esc 取消" : "↑↓ 移动 · Enter 选择 · ← 返回 · Esc 取消"));
+          const questionNavigation = isMultiQuestion
+            ? `1–${Math.min(9, request.questions.length)} 直跳 · ←→ 切换问题 · `
+            : "";
+          const optionNavigation = question.type === "multiple"
+            ? "↑↓ 移动 · Space 选择 · Enter 下一题"
+            : "↑↓ 移动 · Enter 选择";
+          const backNavigation = isMultiQuestion ? "" : " · ← 返回";
+          add(theme.fg("dim", `${questionNavigation}${optionNavigation}${backNavigation} · Esc 取消`));
         }
       }
-      add(theme.fg("accent", "─".repeat(Math.max(1, width))));
+      add(theme.fg("accent", "─".repeat(renderWidth)));
       cachedLines = lines;
+      cachedWidth = renderWidth;
       return lines;
     };
 
@@ -176,6 +246,7 @@ function createWizardComponent(
       render,
       invalidate: () => {
         cachedLines = undefined;
+        cachedWidth = undefined;
       },
       handleInput,
     };

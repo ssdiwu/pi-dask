@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import dask from "../dist/src/extension.js";
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 const request = {
   questions: [
@@ -27,6 +28,32 @@ const request = {
   ],
 };
 
+const navigationRequest = {
+  questions: [
+    ...request.questions,
+    {
+      id: "delivery",
+      title: "Delivery",
+      description: "Choose timing",
+      type: "single",
+      labels: [
+        { id: 1, label: "Now", value: "now", description: "Deliver now" },
+        { id: 2, label: "Later", value: "later", description: "Deliver later" },
+      ],
+    },
+    {
+      id: "risk",
+      title: "Risk",
+      description: "Choose tolerance",
+      type: "single",
+      labels: [
+        { id: 1, label: "Low", value: "low", description: "Prefer safety" },
+        { id: 2, label: "High", value: "high", description: "Accept risk" },
+      ],
+    },
+  ],
+};
+
 function createTool() {
   let tool;
   dask({ registerTool(definition) { tool = definition; } });
@@ -39,6 +66,11 @@ const theme = {
   bold: (text) => text,
 };
 
+const navigationTheme = {
+  ...theme,
+  bg: (color, text) => color === "selectedBg" ? `{${text}}` : text,
+};
+
 function contextFor(keys) {
   return {
     mode: "tui",
@@ -49,6 +81,29 @@ function contextFor(keys) {
       }),
     },
   };
+}
+
+async function captureRenders(targetRequest, keys, width = 120) {
+  const tool = createTool();
+  const renders = [];
+  await assert.rejects(
+    () => tool.execute("call", targetRequest, undefined, undefined, {
+      mode: "tui",
+      ui: {
+        custom: async (factory) => new Promise((resolve) => {
+          const component = factory({ requestRender() {} }, navigationTheme, {}, resolve);
+          renders.push(component.render(width).join("\n"));
+          for (const key of keys) {
+            component.handleInput(key);
+            renders.push(component.render(width).join("\n"));
+          }
+          component.handleInput("\x1b");
+        }),
+      },
+    }),
+    /cancelled dask/,
+  );
+  return renders;
 }
 
 test("dask adapter maps TUI events to a confirmed result", async () => {
@@ -91,6 +146,131 @@ test("dask adapter renders IDs as the user-visible option numbers", async () => 
   );
   assert.match(rendered, /> 1\. Fast/);
   assert.match(rendered, /  2\. Complete/);
+});
+
+test("multi-question rendering shows position and current, answered, and unanswered tabs", async () => {
+  const [initial, afterAnswer] = await captureRenders(navigationRequest, ["\r"]);
+  assert.match(initial, /问题 1 \/ 4/);
+  assert.match(initial, /\{\[○ 1\]\} \[○ 2\] \[○ 3\] \[○ 4\]/);
+  assert.match(afterAnswer, /问题 2 \/ 4/);
+  assert.match(afterAnswer, /\[✓ 1\] \{\[○ 2\]\} \[○ 3\] \[○ 4\]/);
+});
+
+test("multi-question rendering respects changed and extremely narrow widths", async () => {
+  const tool = createTool();
+  let narrowLines = [];
+  let tinyLines = [];
+  await assert.rejects(
+    () => tool.execute("call", navigationRequest, undefined, undefined, {
+      mode: "tui",
+      ui: {
+        custom: async (factory) => new Promise((resolve) => {
+          const component = factory({ requestRender() {} }, navigationTheme, {}, resolve);
+          component.render(120);
+          narrowLines = component.render(8);
+          tinyLines = component.render(4);
+          component.handleInput("\x1b");
+        }),
+      },
+    }),
+    /cancelled dask/,
+  );
+  assert.equal(narrowLines.every((line) => visibleWidth(line) <= 8), true);
+  assert.equal(tinyLines.every((line) => visibleWidth(line) <= 4), true);
+});
+
+test("single-question rendering omits multi-question navigation", async () => {
+  const [rendered] = await captureRenders({ questions: [request.questions[0]] }, []);
+  assert.doesNotMatch(rendered, /问题 1 \/ 1/);
+  assert.doesNotMatch(rendered, /\[○ 1\]/);
+  assert.doesNotMatch(rendered, /切换问题/);
+});
+
+test("number and arrow keys navigate unanswered questions while arrows keep boundary positions", async () => {
+  const renders = await captureRenders(navigationRequest, ["4", "\x1b[D", "\x1b[B", "\x1b[C", "\x1b[C", "9", "1", "\x1b[D"]);
+  assert.match(renders[1], /问题 4 \/ 4[\s\S]*Risk/);
+  assert.match(renders[2], /问题 3 \/ 4[\s\S]*Delivery/);
+  assert.match(renders[3], /问题 3 \/ 4[\s\S]*> 2\. Later/);
+  assert.match(renders[4], /问题 4 \/ 4[\s\S]*Risk/);
+  assert.match(renders[5], /问题 4 \/ 4[\s\S]*Risk/);
+  assert.match(renders[6], /问题 4 \/ 4[\s\S]*Risk/);
+  assert.match(renders[7], /问题 1 \/ 4[\s\S]*Priority/);
+  assert.match(renders[8], /问题 1 \/ 4[\s\S]*Priority/);
+});
+
+test("arrow navigation reaches questions after the ninth numeric shortcut", async () => {
+  const tenQuestions = {
+    questions: Array.from({ length: 10 }, (_, index) => ({
+      id: `q-${index + 1}`,
+      title: `Question ${index + 1}`,
+      description: "Choose one",
+      type: "single",
+      labels: [
+        { id: 1, label: "Yes", value: true, description: "Agree" },
+        { id: 2, label: "No", value: false, description: "Disagree" },
+      ],
+    })),
+  };
+  const renders = await captureRenders(tenQuestions, Array.from({ length: 9 }, () => "\x1b[C"), 160);
+  assert.match(renders.at(-1), /问题 10 \/ 10[\s\S]*Question 10/);
+});
+
+test("non-linear answers still return in request order", async () => {
+  const tool = createTool();
+  const result = await tool.execute(
+    "call",
+    request,
+    undefined,
+    undefined,
+    contextFor(["2", " ", "\x1b[D", "\x1b[B", "\r", "\r", "\r"]),
+  );
+  assert.deepEqual(result.details, {
+    answers: [
+      { id: "priority", value: [{ source: "label", value: "complete" }] },
+      { id: "scope", value: [{ source: "label", value: "docs" }] },
+    ],
+  });
+});
+
+test("numeric shortcuts remain text while editing a custom answer", async () => {
+  const tool = createTool();
+  const result = await tool.execute(
+    "call",
+    request,
+    undefined,
+    undefined,
+    contextFor(["\x1b[B", "\x1b[B", "\r", "4", "\r", " ", "\r", "\r"]),
+  );
+  assert.deepEqual(result.details, {
+    answers: [
+      { id: "priority", value: [{ source: "custom", value: "4" }] },
+      { id: "scope", value: [{ source: "label", value: "docs" }] },
+    ],
+  });
+});
+
+test("incomplete summary confirmation returns to the first unanswered question", async () => {
+  const tool = createTool();
+  let renderedSummary = "";
+  let renderedAfterConfirm = "";
+  await assert.rejects(
+    () => tool.execute("call", request, undefined, undefined, {
+      mode: "tui",
+      ui: {
+        custom: async (factory) => new Promise((resolve) => {
+          const component = factory({ requestRender() {} }, navigationTheme, {}, resolve);
+          for (const key of ["2", " ", "\r"]) component.handleInput(key);
+          renderedSummary = component.render(120).join("\n");
+          component.handleInput("\r");
+          renderedAfterConfirm = component.render(120).join("\n");
+          component.handleInput("\x1b");
+        }),
+      },
+    }),
+    /cancelled dask/,
+  );
+  assert.match(renderedSummary, /还有 1 题未回答；Enter 返回第 1 题补答/);
+  assert.match(renderedAfterConfirm, /问题 1 \/ 2[\s\S]*Priority/);
 });
 
 test("dask adapter rejects non-TUI execution", async () => {

@@ -28,6 +28,7 @@ export type WizardEvent =
   | { type: "custom"; value: string }
   | { type: "next" }
   | { type: "back" }
+  | { type: "jump"; questionIndex: number }
   | { type: "confirm" }
   | { type: "cancel" };
 
@@ -95,6 +96,18 @@ export function reduceWizard(
     return { ...withoutResult, phase: "cancelled" };
   }
 
+  if (event.type === "jump") {
+    if (!Number.isInteger(event.questionIndex)) return state;
+    if (event.questionIndex < 0 || event.questionIndex >= request.questions.length) return state;
+    if (state.phase === "question" && event.questionIndex === state.questionIndex) return state;
+    return {
+      ...state,
+      phase: "question",
+      questionIndex: event.questionIndex,
+      cursor: 0,
+    };
+  }
+
   if (state.phase === "summary") {
     if (event.type === "back") {
       return {
@@ -105,6 +118,15 @@ export function reduceWizard(
       };
     }
     if (event.type === "confirm") {
+      const firstUnanswered = state.drafts.findIndex((draft) => !hasAnswer(draft));
+      if (firstUnanswered >= 0) {
+        return {
+          ...state,
+          phase: "question",
+          questionIndex: firstUnanswered,
+          cursor: 0,
+        };
+      }
       return { ...state, phase: "completed", result: buildResult(request, state.drafts) };
     }
     return state;
@@ -163,6 +185,7 @@ export function currentDraft(state: WizardState): DraftAnswer {
   return { ...draft, selectedIds: draft.selectedIds.slice() };
 }
 
-export function isQuestionAnswered(state: WizardState): boolean {
-  return hasAnswer(state.drafts[state.questionIndex]!);
+export function isQuestionAnswered(state: WizardState, questionIndex = state.questionIndex): boolean {
+  const draft = state.drafts[questionIndex];
+  return draft ? hasAnswer(draft) : false;
 }

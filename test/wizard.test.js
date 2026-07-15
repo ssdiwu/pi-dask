@@ -81,6 +81,42 @@ test("next does not advance an unanswered multiple question", () => {
   assert.equal(state.questionIndex, 1);
 });
 
+test("jump enters unanswered questions and preserves drafts across navigation", () => {
+  let state = createWizard(request);
+  state = reduce(state, { type: "jump", questionIndex: 1 });
+  assert.equal(state.questionIndex, 1);
+  assert.deepEqual(currentDraft(state), { selectedIds: [] });
+
+  state = reduce(state, { type: "toggle" }, { type: "jump", questionIndex: 0 });
+  assert.equal(state.questionIndex, 0);
+  assert.deepEqual(currentDraft(state), { selectedIds: [] });
+
+  state = reduce(state, { type: "move", delta: 1 }, { type: "select" });
+  assert.equal(state.questionIndex, 1);
+  assert.deepEqual(currentDraft(state), { selectedIds: [1] });
+
+  const beforeInvalidJump = state;
+  state = reduce(state, { type: "jump", questionIndex: request.questions.length });
+  assert.strictEqual(state, beforeInvalidJump);
+});
+
+test("confirming an incomplete summary returns to the first unanswered question", () => {
+  let state = createWizard(request);
+  state = reduce(
+    state,
+    { type: "jump", questionIndex: 1 },
+    { type: "toggle" },
+    { type: "next" },
+  );
+  assert.equal(state.phase, "summary");
+
+  state = reduce(state, { type: "confirm" });
+  assert.equal(state.phase, "question");
+  assert.equal(state.questionIndex, 0);
+  assert.equal(state.result, undefined);
+  assert.deepEqual(state.drafts[1], { selectedIds: [1] });
+});
+
 test("cancel is terminal and never exposes a result", () => {
   let state = createWizard(request);
   state = reduce(state, { type: "select" }, { type: "toggle" });

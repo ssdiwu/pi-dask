@@ -1,6 +1,6 @@
 {
   "name": "pi-dask",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Structured choice collection for Pi",
   "type": "module",
   "main": "index.ts",
@@ -10,7 +10,7 @@
     "src",
     "dist",
     "README.md",
-    "doc/接口契约.md"
+    "doc"
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
