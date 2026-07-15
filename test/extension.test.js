@@ -64,6 +64,8 @@ test("dask adapter maps TUI events to a confirmed result", async () => {
 
 test("dask adapter renders IDs as the user-visible option numbers", async () => {
   const tool = createTool();
+  assert.match(tool.description, /include them together in one questions request/);
+  assert.match(tool.description, /depend on another answer in separate calls/);
   assert.match(tool.description, /consecutive IDs in display order \(1, 2, \.\.\., N\)/);
   let rendered = "";
   await assert.rejects(

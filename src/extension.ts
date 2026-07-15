@@ -186,7 +186,7 @@ export default function dask(pi: ExtensionAPI) {
   pi.registerTool({
     name: "dask",
     label: "Dask",
-    description: "Collect flat, enumerated single-choice or multiple-choice answers from the user. Within each question, labels must use consecutive IDs in display order (1, 2, ..., N); the TUI shows these IDs before each option so custom answers can refer to an option by number.",
+    description: "Collect flat, enumerated single-choice or multiple-choice answers from the user. When multiple user decisions are already known and mutually independent, include them together in one questions request; keep decisions whose existence, meaning, or labels depend on another answer in separate calls. Within each question, labels must use consecutive IDs in display order (1, 2, ..., N); the TUI shows these IDs before each option so custom answers can refer to an option by number.",
     parameters: DaskParamsSchema,
     executionMode: "sequential",
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
