@@ -10,7 +10,7 @@ const ScalarSchema = Type.Union([Type.String(), Type.Number(), Type.Boolean()]);
 const LabelSchema = Type.Object({
   id: Type.Integer({
     minimum: 1,
-    description: "User-visible option number. Within each question, IDs must be consecutive in display order: 1, 2, ..., N.",
+    description: "用户可见的选项序号；同一道题中必须按显示顺序从 1 开始连续递增：1、2、……、N。",
   }),
   label: Type.String(),
   value: ScalarSchema,
@@ -186,7 +186,7 @@ export default function dask(pi: ExtensionAPI) {
   pi.registerTool({
     name: "dask",
     label: "Dask",
-    description: "Collect flat, enumerated single-choice or multiple-choice answers from the user. When multiple user decisions are already known and mutually independent, include them together in one questions request; keep decisions whose existence, meaning, or labels depend on another answer in separate calls. Within each question, labels must use consecutive IDs in display order (1, 2, ..., N); the TUI shows these IDs before each option so custom answers can refer to an option by number.",
+    description: "向用户收集平铺的枚举式单选或复选答案。仅在确认确实需要用户决策，且问题已收敛为单选 2–5 项或复选 2–12 项后调用；此时应使用本工具，不要在回复正文中直接列出编号选项，即使当前只有一道题。将当前已知且互不依赖的问题合并到一次 questions 请求；若某题是否出现、题意或选项依赖另一答案，则在获得该答案后另行调用。不要用本工具承接开放式探索，也不要把调用方本应自行收口的工程细节转交给用户。每题 labels 必须按显示顺序使用从 1 开始的连续 ID；TUI 会在选项前显示这些 ID，用户可在“其他（自行填写）”中按编号指代选项。",
     parameters: DaskParamsSchema,
     executionMode: "sequential",
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

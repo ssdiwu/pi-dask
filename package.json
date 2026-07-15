@@ -1,6 +1,6 @@
 {
   "name": "pi-dask",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Structured choice collection for Pi",
   "type": "module",
   "main": "index.ts",
@@ -39,5 +39,13 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ssdiwu/pi-dask.git"
+  },
+  "homepage": "https://github.com/ssdiwu/pi-dask#readme",
+  "bugs": {
+    "url": "https://github.com/ssdiwu/pi-dask/issues"
   }
 }

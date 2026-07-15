@@ -62,11 +62,19 @@ test("dask adapter maps TUI events to a confirmed result", async () => {
   });
 });
 
+test("dask description routes enumerable user decisions through the tool", () => {
+  const tool = createTool();
+  assert.match(tool.description, /不要在回复正文中直接列出编号选项/);
+  assert.match(tool.description, /即使当前只有一道题/);
+  assert.match(tool.description, /当前已知且互不依赖的问题合并到一次 questions 请求/);
+  assert.match(tool.description, /在获得该答案后另行调用/);
+  assert.match(tool.description, /不要用本工具承接开放式探索/);
+  assert.match(tool.description, /调用方本应自行收口的工程细节/);
+});
+
 test("dask adapter renders IDs as the user-visible option numbers", async () => {
   const tool = createTool();
-  assert.match(tool.description, /include them together in one questions request/);
-  assert.match(tool.description, /depend on another answer in separate calls/);
-  assert.match(tool.description, /consecutive IDs in display order \(1, 2, \.\.\., N\)/);
+  assert.match(tool.description, /从 1 开始的连续 ID/);
   let rendered = "";
   await assert.rejects(
     () => tool.execute("call", request, undefined, undefined, {
