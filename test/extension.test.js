@@ -127,6 +127,26 @@ test("dask description routes enumerable user decisions through the tool", () =>
   assert.match(tool.description, /调用方本应自行收口的工程细节/);
 });
 
+test("dask hides call arguments and validation output until expanded", () => {
+  const tool = createTool();
+  const invalidArgs = { questions: [{ title: "Hidden question" }] };
+  const errorResult = {
+    content: [{ type: "text", text: "Validation failed for tool dask\nReceived arguments: Hidden question" }],
+  };
+
+  const compactCall = tool.renderCall(invalidArgs, theme, { expanded: false }).render(120).join("\n").trimEnd();
+  const compactResult = tool.renderResult(errorResult, { expanded: false }, theme, { isError: true }).render(120).join("\n").trimEnd();
+  assert.equal(compactCall, "dask 1 question(s)");
+  assert.match(compactResult, /请求无效；按 Ctrl\+O 查看详情/);
+  assert.doesNotMatch(compactResult, /Validation failed|Received arguments/);
+
+  const expandedCall = tool.renderCall(invalidArgs, theme, { expanded: true }).render(120).join("\n");
+  const expandedResult = tool.renderResult(errorResult, { expanded: true }, theme, { isError: true }).render(120).join("\n");
+  assert.match(expandedCall, /"title": "Hidden question"/);
+  assert.match(expandedResult, /Validation failed for tool dask/);
+  assert.match(expandedResult, /Received arguments: Hidden question/);
+});
+
 test("dask adapter renders IDs as the user-visible option numbers", async () => {
   const tool = createTool();
   assert.match(tool.description, /从 1 开始的连续 ID/);

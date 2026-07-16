@@ -272,14 +272,23 @@ export default function dask(pi: ExtensionAPI) {
         details: result,
       };
     },
-    renderCall(args, theme) {
+    renderCall(args, theme, context) {
       const rawArgs = args as { questions?: unknown };
       const questions = Array.isArray(rawArgs.questions) ? rawArgs.questions.length : 0;
-      return new Text(theme.fg("toolTitle", theme.bold("dask ")) + theme.fg("muted", `${questions} question(s)`), 0, 0);
+      const title = theme.fg("toolTitle", theme.bold("dask ")) + theme.fg("muted", `${questions} question(s)`);
+      const text = context.expanded ? `${title}\n\n${JSON.stringify(args, null, 2)}` : title;
+      return new Text(text, 0, 0);
     },
-    renderResult(result, _options, theme) {
+    renderResult(result, { expanded }, theme, context) {
       const details = result.details as DaskResult | undefined;
-      return new Text(details ? theme.fg("success", `✓ ${details.answers.length} answer(s)`) : "", 0, 0);
+      const output = result.content.reduce<string[]>((lines, block) => {
+        if ("text" in block && typeof block.text === "string") lines.push(block.text);
+        return lines;
+      }, []).join("\n");
+      if (expanded && output) return new Text(theme.fg(context.isError ? "error" : "toolOutput", output), 0, 0);
+      if (details) return new Text(theme.fg("success", `✓ ${details.answers.length} answer(s)`), 0, 0);
+      if (context.isError) return new Text(theme.fg("error", "✗ 请求无效；按 Ctrl+O 查看详情"), 0, 0);
+      return new Text("", 0, 0);
     },
   });
 }
